@@ -13,7 +13,7 @@
 
 <h2>Overview</h2>
 <p>This repository contains teaching materials for a hands-on demonstration on how to evaluate the performance of an AI-assisted image classification model applied to coral reef biodiversity monitoring.</p>
-<p>The demo uses a real <a href="https://coralnet.ucsd.edu">CoralNet</a> source as a case study — a widely used platform for automated annotation of benthic survey images. Students will learn to load a confusion matrix, compute standard performance metrics, and produce publication-quality visualisations in R.</p>
+<p>The demo uses a real CoralNet source as a case study — a widely used platform for automated annotation of benthic survey images. Students will learn to load a confusion matrix, compute standard performance metrics, and produce publication-quality visualisations in R.</p>
 
 <blockquote>This is not about building a model. It is about critically evaluating one — a core skill for responsible use of AI in marine science.</blockquote>
 
