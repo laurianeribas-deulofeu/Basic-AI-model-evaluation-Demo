@@ -39,6 +39,8 @@
 <div class="file-tree">
 ├── README.md<br>
 ├── Model_Evaluation.Rmd &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; # R Markdown — main analysis script<br>
+├── Model_Evaluation.html &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; # HTML — main analysis script<br>
+├── Model_Evaluation.R &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; # R — main analysis script<br>
 ├── confusion_matrix_full_0.csv &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; # 51 × 51 confusion matrix (rows = true, cols = predicted)<br>
 └── confusion_matrix_classsize.csv &nbsp; # Training set composition (class name + n annotations)
 </div>
