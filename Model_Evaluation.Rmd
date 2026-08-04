@@ -1,0 +1,325 @@
+---
+title: "AI Classifier Performance Evaluation"
+subtitle: "Confusion Matrix Analysis — Marine Biodiversity Monitoring"
+author: "L. Ribas-Deulofeu — Nord University"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    theme: flatly
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    number_sections: true
+    code_folding: hide
+    fig_width: 14
+    fig_height: 12
+---
+
+
+```{r, include=FALSE, purl=F, results="hide"}
+knitr::opts_chunk$set(
+  echo=TRUE,
+  message = FALSE,
+  error = FALSE,
+  warning = FALSE, 
+  fig.align = 'center',
+  purl=FALSE
+)
+knitr::opts_knit$set(root.dir = dirname(rstudioapi::getSourceEditorContext()$path))
+```
+
+# Setup & Data Loading
+
+```{r libraries}
+# Load required packages
+# Install missing packages automatically
+pkgs <- c("tidyverse", "readxl", "pheatmap", "knitr", "kableExtra",
+          "scales", "RColorBrewer", "gridExtra", "ggrepel")
+install_if_missing <- pkgs[!pkgs %in% installed.packages()[, "Package"]]
+if (length(install_if_missing)) install.packages(install_if_missing)
+
+library(tidyverse)
+library(readxl)
+library(pheatmap)
+library(knitr)
+library(kableExtra)
+library(scales)
+library(RColorBrewer)
+library(ggrepel)
+```
+
+
+```{r load-data}
+# Load datasets
+# ---------------------------------------------------------
+# Set up working directory as the folder in which both Rscript and dataset are located
+# ---------------------------------------------------------
+#setwd(dirname(rstudioapi::getActiveDocumentContext()$path)) #automatically set your working directory as the folder in which this Rscript is located #this line is silenced in Markdown as it is already handled in previous chunk containing the knitr option, if you run from the console of Rscript, run this line
+
+cm_path<- "./confusion_matrix_full_0.csv" #since you automatically set up your working directory in the previous line,it simplifies calling the confusion matrix and other datasets as long as they are in the same folder as your Rscript
+classsize_path<- "./Confusion_matrix_classsize.csv"
+
+# ---------------------------------------------------------
+
+# Load confusion matrix — first column is class names
+cm_raw <- read.csv(cm_path) #cm=confusion matrix
+class_names <- cm_raw[[1]]
+cm_mat <- as.matrix(cm_raw[, -1])
+rownames(cm_mat) <- class_names #in case your header does not match the one used in this script + if column name contained certain characters, R will modify these characters and row and col names won't match anymore
+colnames(cm_mat) <- class_names
+
+# Load class sizes — expects columns: Class, n_annotations
+cs_raw <- read.csv(classsize_path) #cs=class size
+colnames(cs_raw) <- c("Class", "n_annotations") #in case your header does not match the one used in this script
+```
+
+---
+
+# Training Set Composition
+
+```{r training-composition}
+n_classes <- nrow(cs_raw)
+n_total   <- sum(cs_raw$n_annotations)
+
+# Summary banner
+cat(sprintf("Total classes : %d\n", n_classes))
+cat(sprintf("Total annotations : %s\n", format(n_total, big.mark = ",")))
+cat(sprintf("Mean per class : %.0f\n", mean(cs_raw$n_annotations)))
+cat(sprintf("Min per class  : %d (%s)\n",
+    min(cs_raw$n_annotations),
+    cs_raw$Class[which.min(cs_raw$n_annotations)]))
+cat(sprintf("Max per class  : %d (%s)\n",
+    max(cs_raw$n_annotations),
+    cs_raw$Class[which.max(cs_raw$n_annotations)]))
+```
+
+```{r training-table}
+cs_raw %>%
+  arrange(desc(n_annotations)) %>%
+  mutate(
+    Proportion = paste0(round(n_annotations / n_total * 100, 1), "%"),
+    n_annotations = format(n_annotations, big.mark = ",")
+  ) %>%
+  rename(`Class` = Class,
+         `N annotations` = n_annotations,
+         `% of total annotations` = Proportion) %>%
+  kbl(caption = "Training set composition per class") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE) %>%
+  scroll_box(height = "400px")
+```
+
+```{r training-barplot, fig.height=8}
+cs_raw %>%
+  arrange(n_annotations) %>%
+  mutate(Class = factor(Class, levels = Class)) %>%
+  ggplot(aes(x = Class, y = n_annotations,
+             fill = n_annotations)) +
+  geom_col(width = 0.75) +
+  geom_text(aes(label = format(n_annotations, big.mark = ",")),
+            hjust = -0.1, size = 3, color = "grey30") +
+  scale_fill_gradient(low = "#B5D4F4", high = "#185FA5",
+                      guide = "none") +
+  scale_y_continuous(expand = expansion(mult = c(0, .15)),
+                     labels = comma) +
+  coord_flip() +
+  labs(title = "Training set — annotations per class",
+       x = NULL, y = "Number of annotations") +
+  theme_minimal(base_size = 12) +
+  theme(panel.grid.major.y = element_blank(),
+        plot.title = element_text(face = "bold", size = 13))
+```
+
+---
+
+# Confusion Matrix Heatmap
+
+```{r cm-heatmap, fig.height=14, fig.width=15}
+# Row-normalise so each cell = recall proportion for that class
+cm_norm <- cm_mat / rowSums(cm_mat)
+cm_norm[is.nan(cm_norm)] <- 0
+
+# Color palette: white → navy
+pal <- colorRampPalette(c("#FFFFFF", "#B5D4F4", "#185FA5", "#042C53"))(100)
+
+pheatmap(
+  cm_norm,
+  color             = pal,
+  cluster_rows      = FALSE,
+  cluster_cols      = FALSE,
+  display_numbers   = TRUE,
+  number_format     = "%.2f",
+  number_color      = "grey20",
+  fontsize_number   = 7,
+  fontsize_row      = 9,
+  fontsize_col      = 9,
+  angle_col         = 45,
+  main              = "Confusion matrix — row-normalised (recall per class)",
+  legend_breaks     = seq(0, 1, 0.2),
+  legend_labels     = paste0(seq(0, 100, 20), "%"),
+  border_color      = "white"
+)
+```
+
+> **Reading this matrix:** Each row is a true class. Each cell shows the proportion of that class predicted as each column class. The diagonal = recall. Off-diagonal hotspots reveal which classes are confused with which.
+
+---
+
+# Performance Metrics
+
+```{r metrics}
+# Per-class: TP (true positive), FP (false positive), FN (false negative), TN (true negative)
+TP <- diag(cm_mat)
+FP <- colSums(cm_mat) - TP
+FN <- rowSums(cm_mat) - TP
+TN <- sum(cm_mat) - TP - FP - FN
+
+precision <- ifelse((TP + FP) == 0, NA, TP / (TP + FP)) # measure the correct detection, give you information for false alarm rate
+recall    <- ifelse((TP + FN) == 0, NA, TP / (TP + FN)) #measure missed detection rate
+
+f1        <- ifelse(is.na(precision) | is.na(recall) |
+                    (precision + recall) == 0,
+                    NA,
+                    2 * precision * recall / (precision + recall))
+class_acc <- ifelse((TP + FP + FN + TN) == 0, NA,
+                    (TP + TN) / (TP + FP + FN + TN))
+
+overall_acc <- sum(TP) / sum(cm_mat)
+
+metrics_df <- tibble(
+  Class       = rownames(cm_mat),
+  TP          = TP,
+  FP          = FP,
+  FN          = FN,
+  Precision   = round(precision, 3),
+  Recall      = round(recall, 3),
+  F1          = round(f1, 3),
+  Class_Acc   = round(class_acc, 3)
+) %>%
+  left_join(cs_raw, by = "Class") %>% # to add number of annotations for each class
+  arrange(desc(F1))
+
+metrics_df #call result table
+```
+
+## Overall accuracy
+
+```{r overall-acc}
+cat(sprintf("Overall accuracy: %.2f%%\n", overall_acc * 100))
+```
+
+## Per-class metrics table
+
+```{r metrics-table}
+# Metrics table with color coded F1 score between high (>75%), moderate (<75% and >50%) and low (<50%)
+metrics_df %>%
+  select(Class, n_annotations, Precision, Recall, F1, Class_Acc) %>%
+  rename(
+    `N train`        = n_annotations,
+    `F1 score`       = F1,
+    `Class accuracy` = Class_Acc
+  ) %>%
+  kbl(caption = sprintf(
+    "Per-class metrics — Overall accuracy: %.2f%%", overall_acc * 100)) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE) %>%
+  column_spec(5, bold = TRUE,
+              color = case_when(
+                is.na(metrics_df$F1)        ~ "grey60",
+                metrics_df$F1 >= 0.75       ~ "#0F6E56",
+                metrics_df$F1 >= 0.50       ~ "#BA7517",
+                TRUE                        ~ "#A32D2D"
+              )) %>%
+  scroll_box(height = "500px")
+```
+
+## F1 score — ranked plot
+
+```{r f1-plot, fig.height=9}
+metrics_df %>%
+  filter(!is.na(F1)) %>%
+  arrange(F1) %>%
+  mutate(Class = factor(Class, levels = Class),
+         tier = case_when(
+           F1 >= 0.75 ~ "Good (≥0.75)",
+           F1 >= 0.50 ~ "Moderate (0.50–0.75)",
+           TRUE       ~ "Poor (<0.50)"
+         ),
+         tier = factor(tier, levels = c("Good (≥0.75)",
+                                        "Moderate (0.50–0.75)",
+                                        "Poor (<0.50)"))) %>%
+  ggplot(aes(x = Class, y = F1, fill = tier)) +
+  geom_col(width = 0.75) +
+  geom_hline(yintercept = c(0.5, 0.75),
+             linetype = "dashed", color = "grey50", linewidth = 0.5) +
+  scale_fill_manual(values = c(
+    "Good (≥0.75)"        = "#1D9E75",
+    "Moderate (0.50–0.75)"= "#BA7517",
+    "Poor (<0.50)"        = "#A32D2D"
+  )) +
+  scale_y_continuous(limits = c(0, 1), labels = percent) +
+  coord_flip() +
+  labs(title = "F1 score per class — ranked",
+       x = NULL, y = "F1 score", fill = "Performance tier") +
+  theme_minimal(base_size = 12) +
+  theme(panel.grid.major.y = element_blank(),
+        legend.position = "bottom",
+        plot.title = element_text(face = "bold", size = 13))
+```
+
+## Precision vs. Recall scatter
+
+```{r pr-scatter, fig.height=7}
+metrics_df %>%
+  filter(!is.na(Precision), !is.na(Recall)) %>%
+  ggplot(aes(x = Recall, y = Precision,
+             size = n_annotations, color = F1,
+             label = Class)) +
+  geom_point(alpha = 0.75) +
+  ggrepel::geom_text_repel(size = 2.8, max.overlaps = 20,
+                            color = "grey30") +
+  scale_color_gradientn(
+  colours = c("#A32D2D", "#F09595", "#BA7517", "#1D9E75", "#0F6E56"),
+  values  = scales::rescale(c(0, 0.25, 0.50, 0.75, 1)),
+  limits  = c(0, 1),
+  breaks  = c(0.25, 0.50, 0.75),
+  labels  = c("25% — Poor", "50% — Moderate", "75% — Good"),
+  name    = "F1 score"
+)+
+  scale_size_continuous(name = "N training annotations",
+                        range = c(2, 10)) +
+  scale_x_continuous(limits = c(0, 1), labels = percent) +
+  scale_y_continuous(limits = c(0, 1), labels = percent) +
+  geom_abline(slope = 1, intercept = 0,
+              linetype = "dashed", color = "grey60") +
+  labs(title = "Precision vs. Recall per class",
+       subtitle = "Point size = training set size · Color = F1 score",
+       x = "Recall", y = "Precision") +
+  theme_minimal(base_size = 12) +
+  theme(plot.title = element_text(face = "bold", size = 13))
+```
+
+---
+
+# Summary & Interpretation
+
+```{r summary}
+n_good <- sum(metrics_df$F1 >= 0.75, na.rm = TRUE)
+n_mod  <- sum(metrics_df$F1 >= 0.50 & metrics_df$F1 < 0.75, na.rm = TRUE)
+n_poor <- sum(metrics_df$F1 < 0.50, na.rm = TRUE)
+
+worst <- metrics_df %>% filter(!is.na(F1)) %>% slice_min(F1, n = 3)
+best  <- metrics_df %>% filter(!is.na(F1)) %>% slice_max(F1, n = 3)
+
+cat(sprintf("Overall accuracy     : %.2f%%\n", overall_acc * 100))
+cat(sprintf("Classes assessed     : %d\n", n_classes))
+cat(sprintf("Good F1 (>=0.75)     : %d classes\n", n_good))
+cat(sprintf("Moderate F1 (0.5-0.75): %d classes\n", n_mod))
+cat(sprintf("Poor F1 (<0.50)      : %d classes\n\n", n_poor))
+cat("Top 3 best performing classes:\n")
+print(select(best, Class, F1, Recall, Precision, n_annotations))
+cat("\nTop 3 worst performing classes:\n")
+print(select(worst, Class, F1, Recall, Precision, n_annotations))
+```
+
+---
